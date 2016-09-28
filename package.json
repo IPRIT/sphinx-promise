@@ -1,6 +1,6 @@
 {
   "name": "sphinx-promise",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Promise-based native javascript implementation of the standard Sphinx API",
   "main": "index.js",
   "scripts": {

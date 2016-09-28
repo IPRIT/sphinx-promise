@@ -166,12 +166,20 @@ sphinx.runQueries().tap(results => {
 })
 ```
 
+## Todo
+
+* Implement other methods such as `setSelect`, `addFilterString`, `addFilterRange` etc.
+* Add a full description about each method from [documentation](http://sphinxsearch.com/docs/current.html).
 
 ## Tests
 
 ```js
 $ mocha
 ```
+
+## Also
+
+sphinxapi [https://github.com/Inist-CNRS/node-sphinxapi](https://github.com/Inist-CNRS/node-sphinxapi)
 
 
 ## License
