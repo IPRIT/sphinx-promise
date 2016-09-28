@@ -1,6 +1,6 @@
 # sphinx-promise [![NPM version][npm-image]][npm-url] [![dependencies Status][depstat-image]][depstat-url] [![devDependencies Status Status][deVdepstat-image]][deVdepstat-url]
 
-Graceful native [bluebird](http://bluebirdjs.com/docs/getting-started.html)-promise-based javascript implementation of the standard [Sphinx](http://sphinxsearch.com/) API for fulltext searching based on top of [sphinxapi](https://www.npmjs.com/package/sphinxapi) npm module
+Graceful native [bluebird](http://bluebirdjs.com/docs/getting-started.html)-promise-based javascript implementation of the standard [Sphinx](http://sphinxsearch.com/) API for fulltext searching based on top of [sphinxapi](https://www.npmjs.com/package/sphinxapi)
 
 ![](https://4.bp.blogspot.com/-55kzheOMWfg/VzYvr6MC4rI/AAAAAAAAAP8/fZFAnstd93cqNr7f8E7ESN9TpnmgbrWoACLcB/s1600/%25D1%2581%25D0%25BA%25D0%25B0%25D1%2587%25D0%25B0%25D0%25BD%25D0%25BD%25D1%258B%25D0%25B5%2B%25D1%2584%25D0%25B0%25D0%25B9%25D0%25BB%25D1%258B%2B%25282%2529.png)  ![](http://www.tivix.com/uploads/images/logo_1.focus-none.max-256x256_6cCD0N8.png)
 
