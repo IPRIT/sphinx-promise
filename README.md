@@ -51,6 +51,7 @@ sphinx.setConfig({
 
 ```js
 let query = 'word | anotherword';
+
 sphinx.query(query).then(result => {
 	console.log(result);
 }).catch(console.error.bind(console));
@@ -103,6 +104,7 @@ Another query example with specifying`index`or `comment`(for logs):
 ```js
 let index = 'editions'; // indexes, default is '*'
 let comment = 'Debug query'; // you can find the string in your query logs
+
 sphinx.query({ query, filters, index, comment }).then(result => {
 	console.log(result.matches); // array of objects with document's ids
 });
