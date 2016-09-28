@@ -165,6 +165,42 @@ sphinx.runQueries().tap(results => {
 	// each argument is an array of ids
 })
 ```
+### Setting up limits & match mode
+
+```js
+const sphinx = new Sphinx();
+const params = {
+    index: 'books',
+	limits: {
+	    offset: 0, // default is 0
+	    limit: 100 // default is 20 as documented
+	},
+	matchMode: Sphinx.SPH_MATCH_ANY
+}
+
+/**
+ * e. g. getting user from db, search books by user's name
+ * and then collate books by their ids
+ */
+async function getUsersBooks(userId) {
+    let user = await User.findOne(userId);
+    let result = await sphinx.query(user.name, params);
+    let ids = sphinx.getIdsFromResult(result); // or include `resultAsIds: true` in options
+    return Books.findAll({
+        where: {
+            id: {
+                $in: ids
+            }
+        }
+    });
+}
+
+try {
+    let books = await getUsersBooks(1);
+} catch (error) {
+    console.error(error); // catching errors
+}
+```
 
 ## Todo
 

@@ -117,7 +117,7 @@ describe('Sphinx', function() {
     });
   });
   
-  describe('#setLimits()', function() {
+  describe('#_setLimits()', function() {
     it('should send a query with limits and get correct matches\' length', function() {
       var sphinx = new Sphinx();
       let query = {

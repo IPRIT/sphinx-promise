@@ -44,6 +44,20 @@ class Sphinx extends SphinxClient {
   config = {};
   isDebugMode = false;
   
+  
+  /**
+   * @static
+   * @see http://sphinxsearch.com/docs/current.html#matching-modes
+   */
+  static SPH_MATCH_ALL        = SphinxClient.SPH_MATCH_ALL;
+  static SPH_MATCH_ANY        = SphinxClient.SPH_MATCH_ANY;
+  static SPH_MATCH_PHRASE     = SphinxClient.SPH_MATCH_PHRASE;
+  static SPH_MATCH_BOOLEAN    = SphinxClient.SPH_MATCH_BOOLEAN;
+  static SPH_MATCH_EXTENDED   = SphinxClient.SPH_MATCH_EXTENDED;
+  static SPH_MATCH_EXTENDED2  = SphinxClient.SPH_MATCH_EXTENDED2;
+  static SPH_MATCH_FULLSCAN   = SphinxClient.SPH_MATCH_FULLSCAN;
+  
+  
   /**
    * @param {String} host
    * @param {Number | String} port
@@ -106,15 +120,17 @@ class Sphinx extends SphinxClient {
    *    comment?: String,
    *    filters?: Array,
    *    limits?: Object,
+   *    matchMode?: Number,
    *    resultAsIds?: Boolean
    * }} options
    */
   query(queryString = "", options = {}) {
     [ queryString, options ] = this._ensureQueryArgs(queryString, options);
-    let { index, comment, filters = [], limits, resultAsIds } = options;
-    this.resetFilters();
-    this.addFilters(filters);
-    this.setLimits(limits);
+    let { index, comment, filters = [], limits, resultAsIds, matchMode } = options;
+    this._resetFilters();
+    this._addFilters(filters);
+    this._setLimits(limits);
+    this._setMatchMode(matchMode);
     return Promise.promisify(this.Query.bind( this ))(queryString, index, comment)
       .then(result => resultAsIds ? this.getIdsFromResult(result) : result)
       .tap(result => this.isDebugMode && console.info(result));
@@ -132,25 +148,28 @@ class Sphinx extends SphinxClient {
    *    index?: String,
    *    comment?: String,
    *    filters?: Array,
-   *    limits?: Object
+   *    limits?: Object,
+   *    matchMode?: Number
    * }} options
    * @return {Number} a correspondent index from the array that will be returned
    */
   addQuery(queryString = "", options = {}) {
     [ queryString, options ] = this._ensureQueryArgs(queryString, options);
-    let { index, comment, filters = [], limits } = options;
-    this.resetFilters();
-    this.addFilters(filters);
-    this.setLimits(limits);
+    let { index, comment, filters = [], limits, matchMode } = options;
+    this._resetFilters();
+    this._addFilters(filters);
+    this._setLimits(limits);
+    this._setMatchMode(matchMode);
     return this.AddQuery(queryString, index, comment);
   }
   
   
   /**
    * @param {Array<Object>} filters
+   * @private
    */
-  addFilters(filters = []) {
-    filters.forEach(this.addFilter.bind( this ));
+  _addFilters(filters = []) {
+    filters.forEach(this._addFilter.bind( this ));
   }
   
   
@@ -161,8 +180,9 @@ class Sphinx extends SphinxClient {
    * @param {Number} limit
    * @param {Number} maxMatches
    * @param {Number} cutoff
+   * @private
    */
-  setLimits({ offset = DEFAULT_OFFSET, limit = DEFAULT_LIMIT
+  _setLimits({ offset = DEFAULT_OFFSET, limit = DEFAULT_LIMIT
     , maxMatches = DEFAULT_MAX_MATCHES, cutoff = DEFAULT_CUTOFF } = {}) {
     this.SetLimits(offset, limit, maxMatches, cutoff);
   }
@@ -170,9 +190,11 @@ class Sphinx extends SphinxClient {
   
   /**
    * Set default limits for all queries
+   *
+   * @private
    */
-  resetLimits() {
-    this.setLimits();
+  _resetLimits() {
+    this._setLimits();
   }
   
   /**
@@ -181,8 +203,9 @@ class Sphinx extends SphinxClient {
    * @param {String} attr
    * @param {Array<Number>} values
    * @param {Boolean?} exclude
+   * @private
    */
-  addFilter({ attr, values, exclude = false } = {}) {
+  _addFilter({ attr, values, exclude = false } = {}) {
     if (!isType('[Number]', values)) {
       throw new TypeError('Values must be an array of numbers');
     }
@@ -192,8 +215,10 @@ class Sphinx extends SphinxClient {
   
   /**
    * @see http://sphinxsearch.com/docs/current.html#api-func-resetfilters
+   *
+   * @private
    */
-  resetFilters() {
+  _resetFilters() {
     this.ResetFilters();
   }
   
@@ -205,6 +230,17 @@ class Sphinx extends SphinxClient {
     return Promise.promisify(this.RunQueries.bind( this ))();
   }
   
+  
+  /**
+   * Sets full-text query matching mode, as described in Section 5.1, “Matching modes” from docs.
+   * Parameter must be a constant specifying one of the known modes.
+   * @see http://sphinxsearch.com/docs/current.html#api-func-setmatchmode
+   *
+   * @param {Number} mode
+   */
+  _setMatchMode(mode) {
+    this.SetMatchMode(mode);
+  }
   
   /**
    * Get ids from `macthes` array
@@ -257,6 +293,7 @@ class Sphinx extends SphinxClient {
         offset: DEFAULT_OFFSET,
         count: DEFAULT_LIMIT
       },
+      matchMode: Sphinx.SPH_MATCH_EXTENDED2,
       resultAsIds: false
     };
     return [ queryString, deap.merge(options, defaultOptions) ];

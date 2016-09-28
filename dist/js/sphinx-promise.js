@@ -600,6 +600,8 @@ var Sphinx = function (_SphinxClient) {
 
 
 
+
+
   _createClass(Sphinx, [{
     key: 'setConfig',
     value: function setConfig() {
@@ -654,10 +656,12 @@ var Sphinx = function (_SphinxClient) {
       var filters = _options$filters === undefined ? [] : _options$filters;
       var limits = _options.limits;
       var resultAsIds = _options.resultAsIds;
+      var matchMode = _options.matchMode;
 
-      this.resetFilters();
-      this.addFilters(filters);
-      this.setLimits(limits);
+      this._resetFilters();
+      this._addFilters(filters);
+      this._setLimits(limits);
+      this._setMatchMode(matchMode);
       return _bluebird2.default.promisify(this.Query.bind(this))(queryString, index, comment).then(function (result) {
         return resultAsIds ? _this2.getIdsFromResult(result) : result;
       }).tap(function (result) {
@@ -684,26 +688,28 @@ var Sphinx = function (_SphinxClient) {
       var _options2$filters = _options2.filters;
       var filters = _options2$filters === undefined ? [] : _options2$filters;
       var limits = _options2.limits;
+      var matchMode = _options2.matchMode;
 
-      this.resetFilters();
-      this.addFilters(filters);
-      this.setLimits(limits);
+      this._resetFilters();
+      this._addFilters(filters);
+      this._setLimits(limits);
+      this._setMatchMode(matchMode);
       return this.AddQuery(queryString, index, comment);
     }
 
 
   }, {
-    key: 'addFilters',
-    value: function addFilters() {
+    key: '_addFilters',
+    value: function _addFilters() {
       var filters = arguments.length <= 0 || arguments[0] === undefined ? [] : arguments[0];
 
-      filters.forEach(this.addFilter.bind(this));
+      filters.forEach(this._addFilter.bind(this));
     }
 
 
   }, {
-    key: 'setLimits',
-    value: function setLimits() {
+    key: '_setLimits',
+    value: function _setLimits() {
       var _ref3 = arguments.length <= 0 || arguments[0] === undefined ? {} : arguments[0];
 
       var _ref3$offset = _ref3.offset;
@@ -720,15 +726,15 @@ var Sphinx = function (_SphinxClient) {
 
 
   }, {
-    key: 'resetLimits',
-    value: function resetLimits() {
-      this.setLimits();
+    key: '_resetLimits',
+    value: function _resetLimits() {
+      this._setLimits();
     }
 
 
   }, {
-    key: 'addFilter',
-    value: function addFilter() {
+    key: '_addFilter',
+    value: function _addFilter() {
       var _ref4 = arguments.length <= 0 || arguments[0] === undefined ? {} : arguments[0];
 
       var attr = _ref4.attr;
@@ -744,8 +750,8 @@ var Sphinx = function (_SphinxClient) {
 
 
   }, {
-    key: 'resetFilters',
-    value: function resetFilters() {
+    key: '_resetFilters',
+    value: function _resetFilters() {
       this.ResetFilters();
     }
 
@@ -754,6 +760,13 @@ var Sphinx = function (_SphinxClient) {
     key: 'runQueries',
     value: function runQueries() {
       return _bluebird2.default.promisify(this.RunQueries.bind(this))();
+    }
+
+
+  }, {
+    key: '_setMatchMode',
+    value: function _setMatchMode(mode) {
+      this.SetMatchMode(mode);
     }
 
 
@@ -803,6 +816,7 @@ var Sphinx = function (_SphinxClient) {
           offset: DEFAULT_OFFSET,
           count: DEFAULT_LIMIT
         },
+        matchMode: Sphinx.SPH_MATCH_EXTENDED2,
         resultAsIds: false
       };
       return [queryString, _deap2.default.merge(options, defaultOptions)];
@@ -846,6 +860,15 @@ var Sphinx = function (_SphinxClient) {
 
   return Sphinx;
 }(_sphinxapi2.default);
+
+Sphinx.SPH_MATCH_ALL = _sphinxapi2.default.SPH_MATCH_ALL;
+Sphinx.SPH_MATCH_ANY = _sphinxapi2.default.SPH_MATCH_ANY;
+Sphinx.SPH_MATCH_PHRASE = _sphinxapi2.default.SPH_MATCH_PHRASE;
+Sphinx.SPH_MATCH_BOOLEAN = _sphinxapi2.default.SPH_MATCH_BOOLEAN;
+Sphinx.SPH_MATCH_EXTENDED = _sphinxapi2.default.SPH_MATCH_EXTENDED;
+Sphinx.SPH_MATCH_EXTENDED2 = _sphinxapi2.default.SPH_MATCH_EXTENDED2;
+Sphinx.SPH_MATCH_FULLSCAN = _sphinxapi2.default.SPH_MATCH_FULLSCAN;
+
 
 module.exports = Sphinx;
 //# sourceMappingURL=sphinx-promise.js.map
