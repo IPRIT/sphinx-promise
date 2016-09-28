@@ -47,7 +47,7 @@ sphinx.setConfig({
 });
 ```
 
-#### Basic usage:
+### Basic usage:
 
 ```js
 let query = 'word | anotherword';
@@ -62,7 +62,7 @@ let result = await sphinx.query(query);
 console.log(result);
 ```
 
-#### Setting up filters
+### Setting up filters
 You can learn how to [set up a filter](http://sphinxsearch.com/docs/current.html#api-func-setfilter) from [the official documentation](http://sphinxsearch.com/docs/current.html).
 
 ```js
@@ -114,7 +114,7 @@ sphinx.query({ query, filters, resultAsIds: true }).then(result => {
 });
 ```
 
-#### Chain queries
+### Chain queries
 This module supports chains of queries on top of promises as well.
 
 Basic usage of `addQuery` & `runQueries`:
