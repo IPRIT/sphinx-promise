@@ -59,6 +59,7 @@ sphinx.query(query).then(result => {
 or in es7:
 ```js
 let query = 'word | anotherword';
+
 let result = await sphinx.query(query);
 console.log(result);
 ```
