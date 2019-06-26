@@ -2,10 +2,12 @@
 !(function(global) {
   "use strict";
 
-  var hasOwn = Object.prototype.hasOwnProperty;
+  var Op = Object.prototype;
+  var hasOwn = Op.hasOwnProperty;
   var undefined; 
   var $Symbol = typeof Symbol === "function" ? Symbol : {};
   var iteratorSymbol = $Symbol.iterator || "@@iterator";
+  var asyncIteratorSymbol = $Symbol.asyncIterator || "@@asyncIterator";
   var toStringTagSymbol = $Symbol.toStringTag || "@@toStringTag";
 
   var inModule = typeof module === "object";
@@ -20,7 +22,8 @@
   runtime = global.regeneratorRuntime = inModule ? module.exports : {};
 
   function wrap(innerFn, outerFn, self, tryLocsList) {
-    var generator = Object.create((outerFn || Generator).prototype);
+    var protoGenerator = outerFn && outerFn.prototype instanceof Generator ? outerFn : Generator;
+    var generator = Object.create(protoGenerator.prototype);
     var context = new Context(tryLocsList || []);
 
     generator._invoke = makeInvokeMethod(innerFn, self, context);
@@ -48,10 +51,25 @@
   function GeneratorFunction() {}
   function GeneratorFunctionPrototype() {}
 
-  var Gp = GeneratorFunctionPrototype.prototype = Generator.prototype;
+  var IteratorPrototype = {};
+  IteratorPrototype[iteratorSymbol] = function () {
+    return this;
+  };
+
+  var getProto = Object.getPrototypeOf;
+  var NativeIteratorPrototype = getProto && getProto(getProto(values([])));
+  if (NativeIteratorPrototype &&
+      NativeIteratorPrototype !== Op &&
+      hasOwn.call(NativeIteratorPrototype, iteratorSymbol)) {
+    IteratorPrototype = NativeIteratorPrototype;
+  }
+
+  var Gp = GeneratorFunctionPrototype.prototype =
+    Generator.prototype = Object.create(IteratorPrototype);
   GeneratorFunction.prototype = Gp.constructor = GeneratorFunctionPrototype;
   GeneratorFunctionPrototype.constructor = GeneratorFunction;
-  GeneratorFunctionPrototype[toStringTagSymbol] = GeneratorFunction.displayName = "GeneratorFunction";
+  GeneratorFunctionPrototype[toStringTagSymbol] =
+    GeneratorFunction.displayName = "GeneratorFunction";
 
   function defineIteratorMethods(prototype) {
     ["next", "throw", "return"].forEach(function(method) {
@@ -83,12 +101,8 @@
   };
 
   runtime.awrap = function(arg) {
-    return new AwaitArgument(arg);
+    return { __await: arg };
   };
-
-  function AwaitArgument(arg) {
-    this.arg = arg;
-  }
 
   function AsyncIterator(generator) {
     function invoke(method, arg, resolve, reject) {
@@ -98,8 +112,10 @@
       } else {
         var result = record.arg;
         var value = result.value;
-        if (value instanceof AwaitArgument) {
-          return Promise.resolve(value.arg).then(function(value) {
+        if (value &&
+            typeof value === "object" &&
+            hasOwn.call(value, "__await")) {
+          return Promise.resolve(value.__await).then(function(value) {
             invoke("next", value, resolve, reject);
           }, function(err) {
             invoke("throw", err, resolve, reject);
@@ -113,8 +129,8 @@
       }
     }
 
-    if (typeof process === "object" && process.domain) {
-      invoke = process.domain.bind(invoke);
+    if (typeof global.process === "object" && global.process.domain) {
+      invoke = global.process.domain.bind(invoke);
     }
 
     var previousPromise;
@@ -137,6 +153,10 @@
   }
 
   defineIteratorMethods(AsyncIterator.prototype);
+  AsyncIterator.prototype[asyncIteratorSymbol] = function () {
+    return this;
+  };
+  runtime.AsyncIterator = AsyncIterator;
 
   runtime.async = function(innerFn, outerFn, self, tryLocsList) {
     var iter = new AsyncIterator(
@@ -166,73 +186,32 @@
         return doneResult();
       }
 
+      context.method = method;
+      context.arg = arg;
+
       while (true) {
         var delegate = context.delegate;
         if (delegate) {
-          if (method === "return" ||
-              (method === "throw" && delegate.iterator[method] === undefined)) {
-            context.delegate = null;
-
-            var returnMethod = delegate.iterator["return"];
-            if (returnMethod) {
-              var record = tryCatch(returnMethod, delegate.iterator, arg);
-              if (record.type === "throw") {
-                method = "throw";
-                arg = record.arg;
-                continue;
-              }
-            }
-
-            if (method === "return") {
-              continue;
-            }
+          var delegateResult = maybeInvokeDelegate(delegate, context);
+          if (delegateResult) {
+            if (delegateResult === ContinueSentinel) continue;
+            return delegateResult;
           }
-
-          var record = tryCatch(
-            delegate.iterator[method],
-            delegate.iterator,
-            arg
-          );
-
-          if (record.type === "throw") {
-            context.delegate = null;
-
-            method = "throw";
-            arg = record.arg;
-            continue;
-          }
-
-          method = "next";
-          arg = undefined;
-
-          var info = record.arg;
-          if (info.done) {
-            context[delegate.resultName] = info.value;
-            context.next = delegate.nextLoc;
-          } else {
-            state = GenStateSuspendedYield;
-            return info;
-          }
-
-          context.delegate = null;
         }
 
-        if (method === "next") {
-          context.sent = context._sent = arg;
+        if (context.method === "next") {
+          context.sent = context._sent = context.arg;
 
-        } else if (method === "throw") {
+        } else if (context.method === "throw") {
           if (state === GenStateSuspendedStart) {
             state = GenStateCompleted;
-            throw arg;
+            throw context.arg;
           }
 
-          if (context.dispatchException(arg)) {
-            method = "next";
-            arg = undefined;
-          }
+          context.dispatchException(context.arg);
 
-        } else if (method === "return") {
-          context.abrupt("return", arg);
+        } else if (context.method === "return") {
+          context.abrupt("return", context.arg);
         }
 
         state = GenStateExecuting;
@@ -243,35 +222,91 @@
             ? GenStateCompleted
             : GenStateSuspendedYield;
 
-          var info = {
+          if (record.arg === ContinueSentinel) {
+            continue;
+          }
+
+          return {
             value: record.arg,
             done: context.done
           };
 
-          if (record.arg === ContinueSentinel) {
-            if (context.delegate && method === "next") {
-              arg = undefined;
-            }
-          } else {
-            return info;
-          }
-
         } else if (record.type === "throw") {
           state = GenStateCompleted;
-          method = "throw";
-          arg = record.arg;
+          context.method = "throw";
+          context.arg = record.arg;
         }
       }
     };
   }
 
+  function maybeInvokeDelegate(delegate, context) {
+    var method = delegate.iterator[context.method];
+    if (method === undefined) {
+      context.delegate = null;
+
+      if (context.method === "throw") {
+        if (delegate.iterator.return) {
+          context.method = "return";
+          context.arg = undefined;
+          maybeInvokeDelegate(delegate, context);
+
+          if (context.method === "throw") {
+            return ContinueSentinel;
+          }
+        }
+
+        context.method = "throw";
+        context.arg = new TypeError(
+          "The iterator does not provide a 'throw' method");
+      }
+
+      return ContinueSentinel;
+    }
+
+    var record = tryCatch(method, delegate.iterator, context.arg);
+
+    if (record.type === "throw") {
+      context.method = "throw";
+      context.arg = record.arg;
+      context.delegate = null;
+      return ContinueSentinel;
+    }
+
+    var info = record.arg;
+
+    if (! info) {
+      context.method = "throw";
+      context.arg = new TypeError("iterator result is not an object");
+      context.delegate = null;
+      return ContinueSentinel;
+    }
+
+    if (info.done) {
+      context[delegate.resultName] = info.value;
+
+      context.next = delegate.nextLoc;
+
+      if (context.method !== "return") {
+        context.method = "next";
+        context.arg = undefined;
+      }
+
+    } else {
+      return info;
+    }
+
+    context.delegate = null;
+    return ContinueSentinel;
+  }
+
   defineIteratorMethods(Gp);
+
+  Gp[toStringTagSymbol] = "Generator";
 
   Gp[iteratorSymbol] = function() {
     return this;
   };
-
-  Gp[toStringTagSymbol] = "Generator";
 
   Gp.toString = function() {
     return "[object Generator]";
@@ -376,6 +411,9 @@
       this.done = false;
       this.delegate = null;
 
+      this.method = "next";
+      this.arg = undefined;
+
       this.tryEntries.forEach(resetTryEntry);
 
       if (!skipTempReset) {
@@ -411,7 +449,13 @@
         record.type = "throw";
         record.arg = exception;
         context.next = loc;
-        return !!caught;
+
+        if (caught) {
+          context.method = "next";
+          context.arg = undefined;
+        }
+
+        return !! caught;
       }
 
       for (var i = this.tryEntries.length - 1; i >= 0; --i) {
@@ -474,12 +518,12 @@
       record.arg = arg;
 
       if (finallyEntry) {
+        this.method = "next";
         this.next = finallyEntry.finallyLoc;
-      } else {
-        this.complete(record);
+        return ContinueSentinel;
       }
 
-      return ContinueSentinel;
+      return this.complete(record);
     },
 
     complete: function(record, afterLoc) {
@@ -491,11 +535,14 @@
           record.type === "continue") {
         this.next = record.arg;
       } else if (record.type === "return") {
-        this.rval = record.arg;
+        this.rval = this.arg = record.arg;
+        this.method = "return";
         this.next = "end";
       } else if (record.type === "normal" && afterLoc) {
         this.next = afterLoc;
       }
+
+      return ContinueSentinel;
     },
 
     finish: function(finallyLoc) {
@@ -532,6 +579,10 @@
         nextLoc: nextLoc
       };
 
+      if (this.method === "next") {
+        this.arg = undefined;
+      }
+
       return ContinueSentinel;
     }
   };
@@ -563,7 +614,7 @@ var _deap2 = _interopRequireDefault(_deap);
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
-function _asyncToGenerator(fn) { return function () { var gen = fn.apply(this, arguments); return new _bluebird2.default(function (resolve, reject) { function step(key, arg) { try { var info = gen[key](arg); var value = info.value; } catch (error) { reject(error); return; } if (info.done) { resolve(value); } else { return _bluebird2.default.resolve(value).then(function (value) { return step("next", value); }, function (err) { return step("throw", err); }); } } return step("next"); }); }; }
+function _asyncToGenerator(fn) { return function () { var gen = fn.apply(this, arguments); return new _bluebird2.default(function (resolve, reject) { function step(key, arg) { try { var info = gen[key](arg); var value = info.value; } catch (error) { reject(error); return; } if (info.done) { resolve(value); } else { return _bluebird2.default.resolve(value).then(function (value) { step("next", value); }, function (err) { step("throw", err); }); } } return step("next"); }); }; }
 
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
@@ -580,12 +631,11 @@ var Sphinx = function (_SphinxClient) {
   _inherits(Sphinx, _SphinxClient);
 
   function Sphinx() {
-    var _ref = arguments.length <= 0 || arguments[0] === undefined ? {} : arguments[0];
-
-    var _ref$host = _ref.host;
-    var host = _ref$host === undefined ? 'localhost' : _ref$host;
-    var _ref$port = _ref.port;
-    var port = _ref$port === undefined ? 9312 : _ref$port;
+    var _ref = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
+        _ref$host = _ref.host,
+        host = _ref$host === undefined ? 'localhost' : _ref$host,
+        _ref$port = _ref.port,
+        port = _ref$port === undefined ? 9312 : _ref$port;
 
     _classCallCheck(this, Sphinx);
 
@@ -605,12 +655,11 @@ var Sphinx = function (_SphinxClient) {
   _createClass(Sphinx, [{
     key: 'setConfig',
     value: function setConfig() {
-      var _ref2 = arguments.length <= 0 || arguments[0] === undefined ? {} : arguments[0];
-
-      var _ref2$host = _ref2.host;
-      var host = _ref2$host === undefined ? 'localhost' : _ref2$host;
-      var _ref2$port = _ref2.port;
-      var port = _ref2$port === undefined ? 9312 : _ref2$port;
+      var _ref2 = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
+          _ref2$host = _ref2.host,
+          host = _ref2$host === undefined ? 'localhost' : _ref2$host,
+          _ref2$port = _ref2.port,
+          port = _ref2$port === undefined ? 9312 : _ref2$port;
 
       if (!(0, _typeCheck.typeCheck)('String', host) || !(0, _typeCheck.typeCheck)('Number | String', port)) {
         throw new TypeError('Invalid config object');
@@ -623,10 +672,10 @@ var Sphinx = function (_SphinxClient) {
   }, {
     key: 'setRetriesOption',
     value: function setRetriesOption() {
-      var retryOption = arguments.length <= 0 || arguments[0] === undefined ? {} : arguments[0];
-      var count = retryOption.count;
-      var _retryOption$delay = retryOption.delay;
-      var delay = _retryOption$delay === undefined ? 0 : _retryOption$delay;
+      var retryOption = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
+      var count = retryOption.count,
+          _retryOption$delay = retryOption.delay,
+          delay = _retryOption$delay === undefined ? 0 : _retryOption$delay;
 
       if (!(0, _typeCheck.typeCheck)('Number', count) || !(0, _typeCheck.typeCheck)('Number', delay)) {
         throw new TypeError('Invalid RetryOption object');
@@ -640,8 +689,8 @@ var Sphinx = function (_SphinxClient) {
     value: function query() {
       var _this2 = this;
 
-      var queryString = arguments.length <= 0 || arguments[0] === undefined ? "" : arguments[0];
-      var options = arguments.length <= 1 || arguments[1] === undefined ? {} : arguments[1];
+      var queryString = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : "";
+      var options = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
 
       var _ensureQueryArgs2 = this._ensureQueryArgs(queryString, options);
 
@@ -649,14 +698,14 @@ var Sphinx = function (_SphinxClient) {
 
       queryString = _ensureQueryArgs3[0];
       options = _ensureQueryArgs3[1];
-      var _options = options;
-      var index = _options.index;
-      var comment = _options.comment;
-      var _options$filters = _options.filters;
-      var filters = _options$filters === undefined ? [] : _options$filters;
-      var limits = _options.limits;
-      var resultAsIds = _options.resultAsIds;
-      var matchMode = _options.matchMode;
+      var _options = options,
+          index = _options.index,
+          comment = _options.comment,
+          _options$filters = _options.filters,
+          filters = _options$filters === undefined ? [] : _options$filters,
+          limits = _options.limits,
+          resultAsIds = _options.resultAsIds,
+          matchMode = _options.matchMode;
 
       this._resetFilters();
       this._addFilters(filters);
@@ -673,8 +722,8 @@ var Sphinx = function (_SphinxClient) {
   }, {
     key: 'addQuery',
     value: function addQuery() {
-      var queryString = arguments.length <= 0 || arguments[0] === undefined ? "" : arguments[0];
-      var options = arguments.length <= 1 || arguments[1] === undefined ? {} : arguments[1];
+      var queryString = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : "";
+      var options = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
 
       var _ensureQueryArgs4 = this._ensureQueryArgs(queryString, options);
 
@@ -682,13 +731,13 @@ var Sphinx = function (_SphinxClient) {
 
       queryString = _ensureQueryArgs5[0];
       options = _ensureQueryArgs5[1];
-      var _options2 = options;
-      var index = _options2.index;
-      var comment = _options2.comment;
-      var _options2$filters = _options2.filters;
-      var filters = _options2$filters === undefined ? [] : _options2$filters;
-      var limits = _options2.limits;
-      var matchMode = _options2.matchMode;
+      var _options2 = options,
+          index = _options2.index,
+          comment = _options2.comment,
+          _options2$filters = _options2.filters,
+          filters = _options2$filters === undefined ? [] : _options2$filters,
+          limits = _options2.limits,
+          matchMode = _options2.matchMode;
 
       this._resetFilters();
       this._addFilters(filters);
@@ -701,7 +750,7 @@ var Sphinx = function (_SphinxClient) {
   }, {
     key: '_addFilters',
     value: function _addFilters() {
-      var filters = arguments.length <= 0 || arguments[0] === undefined ? [] : arguments[0];
+      var filters = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : [];
 
       filters.forEach(this._addFilter.bind(this));
     }
@@ -710,16 +759,15 @@ var Sphinx = function (_SphinxClient) {
   }, {
     key: '_setLimits',
     value: function _setLimits() {
-      var _ref3 = arguments.length <= 0 || arguments[0] === undefined ? {} : arguments[0];
-
-      var _ref3$offset = _ref3.offset;
-      var offset = _ref3$offset === undefined ? DEFAULT_OFFSET : _ref3$offset;
-      var _ref3$limit = _ref3.limit;
-      var limit = _ref3$limit === undefined ? DEFAULT_LIMIT : _ref3$limit;
-      var _ref3$maxMatches = _ref3.maxMatches;
-      var maxMatches = _ref3$maxMatches === undefined ? DEFAULT_MAX_MATCHES : _ref3$maxMatches;
-      var _ref3$cutoff = _ref3.cutoff;
-      var cutoff = _ref3$cutoff === undefined ? DEFAULT_CUTOFF : _ref3$cutoff;
+      var _ref3 = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
+          _ref3$offset = _ref3.offset,
+          offset = _ref3$offset === undefined ? DEFAULT_OFFSET : _ref3$offset,
+          _ref3$limit = _ref3.limit,
+          limit = _ref3$limit === undefined ? DEFAULT_LIMIT : _ref3$limit,
+          _ref3$maxMatches = _ref3.maxMatches,
+          maxMatches = _ref3$maxMatches === undefined ? DEFAULT_MAX_MATCHES : _ref3$maxMatches,
+          _ref3$cutoff = _ref3.cutoff,
+          cutoff = _ref3$cutoff === undefined ? DEFAULT_CUTOFF : _ref3$cutoff;
 
       this.SetLimits(offset, limit, maxMatches, cutoff);
     }
@@ -735,17 +783,20 @@ var Sphinx = function (_SphinxClient) {
   }, {
     key: '_addFilter',
     value: function _addFilter() {
-      var _ref4 = arguments.length <= 0 || arguments[0] === undefined ? {} : arguments[0];
+      var _ref4 = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
+          attr = _ref4.attr,
+          values = _ref4.values,
+          _ref4$exclude = _ref4.exclude,
+          exclude = _ref4$exclude === undefined ? false : _ref4$exclude;
 
-      var attr = _ref4.attr;
-      var values = _ref4.values;
-      var _ref4$exclude = _ref4.exclude;
-      var exclude = _ref4$exclude === undefined ? false : _ref4$exclude;
-
-      if (!(0, _typeCheck.typeCheck)('[Number]', values)) {
-        throw new TypeError('Values must be an array of numbers');
+      values = values || values;
+      if ((0, _typeCheck.typeCheck)('[Number]', values)) {
+        this.SetFilter(attr, values, exclude);
+      }if ((0, _typeCheck.typeCheck)('Number', values)) {
+        this.SetFilter(attr, [values], exclude);
+      } else {
+        this.SetFilterString(attr, values, exclude);
       }
-      this.SetFilter(attr, values, exclude);
     }
 
 
@@ -773,7 +824,7 @@ var Sphinx = function (_SphinxClient) {
   }, {
     key: 'getIdsFromResult',
     value: function getIdsFromResult() {
-      var result = arguments.length <= 0 || arguments[0] === undefined ? {} : arguments[0];
+      var result = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
 
       if (!(0, _typeCheck.typeCheck)('Object', result)) {
         throw new TypeError('Result must be an object');
@@ -791,7 +842,7 @@ var Sphinx = function (_SphinxClient) {
   }, {
     key: 'setDebugMode',
     value: function setDebugMode() {
-      var mode = arguments.length <= 0 || arguments[0] === undefined ? true : arguments[0];
+      var mode = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : true;
 
       this.isDebugMode = mode;
     }
@@ -826,8 +877,8 @@ var Sphinx = function (_SphinxClient) {
   }, {
     key: '_test',
     value: function () {
-      var _ref5 = _asyncToGenerator(regeneratorRuntime.mark(function _callee() {
-        var str = arguments.length <= 0 || arguments[0] === undefined ? 'works' : arguments[0];
+      var _ref5 = _asyncToGenerator( regeneratorRuntime.mark(function _callee() {
+        var str = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : 'works';
         return regeneratorRuntime.wrap(function _callee$(_context) {
           while (1) {
             switch (_context.prev = _context.next) {
@@ -850,7 +901,7 @@ var Sphinx = function (_SphinxClient) {
         }, _callee, this);
       }));
 
-      function _test(_x13) {
+      function _test() {
         return _ref5.apply(this, arguments);
       }
 
