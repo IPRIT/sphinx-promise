@@ -1,3 +1,333 @@
+'use strict';
+
+var _slicedToArray = function () { function sliceIterator(arr, i) { var _arr = []; var _n = true; var _d = false; var _e = undefined; try { for (var _i = arr[Symbol.iterator](), _s; !(_n = (_s = _i.next()).done); _n = true) { _arr.push(_s.value); if (i && _arr.length === i) break; } } catch (err) { _d = true; _e = err; } finally { try { if (!_n && _i["return"]) _i["return"](); } finally { if (_d) throw _e; } } return _arr; } return function (arr, i) { if (Array.isArray(arr)) { return arr; } else if (Symbol.iterator in Object(arr)) { return sliceIterator(arr, i); } else { throw new TypeError("Invalid attempt to destructure non-iterable instance"); } }; }();
+
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+var _bluebird = require('bluebird');
+
+var _bluebird2 = _interopRequireDefault(_bluebird);
+
+var _sphinxapi = require('sphinxapi');
+
+var _sphinxapi2 = _interopRequireDefault(_sphinxapi);
+
+var _typeCheck = require('type-check');
+
+var _deap = require('deap');
+
+var _deap2 = _interopRequireDefault(_deap);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function _asyncToGenerator(fn) { return function () { var gen = fn.apply(this, arguments); return new _bluebird2.default(function (resolve, reject) { function step(key, arg) { try { var info = gen[key](arg); var value = info.value; } catch (error) { reject(error); return; } if (info.done) { resolve(value); } else { return _bluebird2.default.resolve(value).then(function (value) { step("next", value); }, function (err) { step("throw", err); }); } } return step("next"); }); }; }
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+function _possibleConstructorReturn(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
+
+function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; } 
+
+var DEFAULT_OFFSET = 0;
+var DEFAULT_LIMIT = 20;
+var DEFAULT_MAX_MATCHES = 1000;
+var DEFAULT_CUTOFF = 0;
+
+var Sphinx = function (_SphinxClient) {
+  _inherits(Sphinx, _SphinxClient);
+
+  function Sphinx() {
+    var _ref = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
+        _ref$host = _ref.host,
+        host = _ref$host === undefined ? 'localhost' : _ref$host,
+        _ref$port = _ref.port,
+        port = _ref$port === undefined ? 9312 : _ref$port;
+
+    _classCallCheck(this, Sphinx);
+
+    var _this = _possibleConstructorReturn(this, (Sphinx.__proto__ || Object.getPrototypeOf(Sphinx)).call(this));
+
+    _this.config = {};
+    _this.isDebugMode = false;
+
+    _this.setConfig({ host: host, port: port });
+    return _this;
+  }
+
+
+
+
+
+  _createClass(Sphinx, [{
+    key: 'setConfig',
+    value: function setConfig() {
+      var _ref2 = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
+          _ref2$host = _ref2.host,
+          host = _ref2$host === undefined ? 'localhost' : _ref2$host,
+          _ref2$port = _ref2.port,
+          port = _ref2$port === undefined ? 9312 : _ref2$port;
+
+      if (!(0, _typeCheck.typeCheck)('String', host) || !(0, _typeCheck.typeCheck)('Number | String', port)) {
+        throw new TypeError('Invalid config object');
+      }
+      this.config = { host: host, port: port };
+      this.SetServer(host, Number(port));
+    }
+
+
+  }, {
+    key: 'setRetriesOption',
+    value: function setRetriesOption() {
+      var retryOption = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
+      var count = retryOption.count,
+          _retryOption$delay = retryOption.delay,
+          delay = _retryOption$delay === undefined ? 0 : _retryOption$delay;
+
+      if (!(0, _typeCheck.typeCheck)('Number', count) || !(0, _typeCheck.typeCheck)('Number', delay)) {
+        throw new TypeError('Invalid RetryOption object');
+      }
+      this.SetRetries(count, delay);
+    }
+
+
+  }, {
+    key: 'query',
+    value: function query() {
+      var _this2 = this;
+
+      var queryString = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : "";
+      var options = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
+
+      var _ensureQueryArgs2 = this._ensureQueryArgs(queryString, options);
+
+      var _ensureQueryArgs3 = _slicedToArray(_ensureQueryArgs2, 2);
+
+      queryString = _ensureQueryArgs3[0];
+      options = _ensureQueryArgs3[1];
+      var _options = options,
+          index = _options.index,
+          comment = _options.comment,
+          _options$filters = _options.filters,
+          filters = _options$filters === undefined ? [] : _options$filters,
+          limits = _options.limits,
+          resultAsIds = _options.resultAsIds,
+          matchMode = _options.matchMode;
+
+      this._resetFilters();
+      this._addFilters(filters);
+      this._setLimits(limits);
+      this._setMatchMode(matchMode);
+      return _bluebird2.default.promisify(this.Query.bind(this))(queryString, index, comment).then(function (result) {
+        return resultAsIds ? _this2.getIdsFromResult(result) : result;
+      }).tap(function (result) {
+        return _this2.isDebugMode && console.info(result);
+      });
+    }
+
+
+  }, {
+    key: 'addQuery',
+    value: function addQuery() {
+      var queryString = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : "";
+      var options = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
+
+      var _ensureQueryArgs4 = this._ensureQueryArgs(queryString, options);
+
+      var _ensureQueryArgs5 = _slicedToArray(_ensureQueryArgs4, 2);
+
+      queryString = _ensureQueryArgs5[0];
+      options = _ensureQueryArgs5[1];
+      var _options2 = options,
+          index = _options2.index,
+          comment = _options2.comment,
+          _options2$filters = _options2.filters,
+          filters = _options2$filters === undefined ? [] : _options2$filters,
+          limits = _options2.limits,
+          matchMode = _options2.matchMode;
+
+      this._resetFilters();
+      this._addFilters(filters);
+      this._setLimits(limits);
+      this._setMatchMode(matchMode);
+      return this.AddQuery(queryString, index, comment);
+    }
+
+
+  }, {
+    key: '_addFilters',
+    value: function _addFilters() {
+      var filters = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : [];
+
+      filters.forEach(this._addFilter.bind(this));
+    }
+
+
+  }, {
+    key: '_setLimits',
+    value: function _setLimits() {
+      var _ref3 = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
+          _ref3$offset = _ref3.offset,
+          offset = _ref3$offset === undefined ? DEFAULT_OFFSET : _ref3$offset,
+          _ref3$limit = _ref3.limit,
+          limit = _ref3$limit === undefined ? DEFAULT_LIMIT : _ref3$limit,
+          _ref3$maxMatches = _ref3.maxMatches,
+          maxMatches = _ref3$maxMatches === undefined ? DEFAULT_MAX_MATCHES : _ref3$maxMatches,
+          _ref3$cutoff = _ref3.cutoff,
+          cutoff = _ref3$cutoff === undefined ? DEFAULT_CUTOFF : _ref3$cutoff;
+
+      this.SetLimits(offset, limit, maxMatches, cutoff);
+    }
+
+
+  }, {
+    key: '_resetLimits',
+    value: function _resetLimits() {
+      this._setLimits();
+    }
+
+
+  }, {
+    key: '_addFilter',
+    value: function _addFilter() {
+      var _ref4 = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
+          attr = _ref4.attr,
+          values = _ref4.values,
+          _ref4$exclude = _ref4.exclude,
+          exclude = _ref4$exclude === undefined ? false : _ref4$exclude;
+
+      values = values || values;
+      if ((0, _typeCheck.typeCheck)('[Number]', values)) {
+        this.SetFilter(attr, values, exclude);
+      }if ((0, _typeCheck.typeCheck)('Number', values)) {
+        this.SetFilter(attr, [values], exclude);
+      } else {
+        this.SetFilterString(attr, values, exclude);
+      }
+    }
+
+
+  }, {
+    key: '_resetFilters',
+    value: function _resetFilters() {
+      this.ResetFilters();
+    }
+
+
+  }, {
+    key: 'runQueries',
+    value: function runQueries() {
+      return _bluebird2.default.promisify(this.RunQueries.bind(this))();
+    }
+
+
+  }, {
+    key: '_setMatchMode',
+    value: function _setMatchMode(mode) {
+      this.SetMatchMode(mode);
+    }
+
+
+  }, {
+    key: 'getIdsFromResult',
+    value: function getIdsFromResult() {
+      var result = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
+
+      if (!(0, _typeCheck.typeCheck)('Object', result)) {
+        throw new TypeError('Result must be an object');
+      } else if (!result.hasOwnProperty('matches')) {
+        return [];
+      }
+      return result.matches.map(function (match) {
+        return match && match.id;
+      }).filter(function (id) {
+        return (0, _typeCheck.typeCheck)('Number', id);
+      });
+    }
+
+
+  }, {
+    key: 'setDebugMode',
+    value: function setDebugMode() {
+      var mode = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : true;
+
+      this.isDebugMode = mode;
+    }
+
+
+  }, {
+    key: '_ensureQueryArgs',
+    value: function _ensureQueryArgs(queryString, options) {
+      if ((0, _typeCheck.typeCheck)('Object', queryString)) {
+        if (!(0, _typeCheck.typeCheck)('String', queryString.query)) {
+          throw new TypeError('Query must be a string');
+        }
+        options = queryString;
+        queryString = options.query;
+        delete options.query;
+      }
+      var defaultOptions = {
+        index: '*',
+        comment: '',
+        filters: [],
+        limits: {
+          offset: DEFAULT_OFFSET,
+          count: DEFAULT_LIMIT
+        },
+        matchMode: Sphinx.SPH_MATCH_EXTENDED2,
+        resultAsIds: false
+      };
+      return [queryString, _deap2.default.merge(options, defaultOptions)];
+    }
+
+
+  }, {
+    key: '_test',
+    value: function () {
+      var _ref5 = _asyncToGenerator( regeneratorRuntime.mark(function _callee() {
+        var str = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : 'works';
+        return regeneratorRuntime.wrap(function _callee$(_context) {
+          while (1) {
+            switch (_context.prev = _context.next) {
+              case 0:
+                console.log('Waiting...');
+                _context.next = 3;
+                return _bluebird2.default.delay(500);
+
+              case 3:
+                console.log('Done!');
+                return _context.abrupt('return', _bluebird2.default.delay(500).then(function () {
+                  return console.log('Resolved:', str);
+                }));
+
+              case 5:
+              case 'end':
+                return _context.stop();
+            }
+          }
+        }, _callee, this);
+      }));
+
+      function _test() {
+        return _ref5.apply(this, arguments);
+      }
+
+      return _test;
+    }()
+  }]);
+
+  return Sphinx;
+}(_sphinxapi2.default);
+
+Sphinx.SPH_MATCH_ALL = _sphinxapi2.default.SPH_MATCH_ALL;
+Sphinx.SPH_MATCH_ANY = _sphinxapi2.default.SPH_MATCH_ANY;
+Sphinx.SPH_MATCH_PHRASE = _sphinxapi2.default.SPH_MATCH_PHRASE;
+Sphinx.SPH_MATCH_BOOLEAN = _sphinxapi2.default.SPH_MATCH_BOOLEAN;
+Sphinx.SPH_MATCH_EXTENDED = _sphinxapi2.default.SPH_MATCH_EXTENDED;
+Sphinx.SPH_MATCH_EXTENDED2 = _sphinxapi2.default.SPH_MATCH_EXTENDED2;
+Sphinx.SPH_MATCH_FULLSCAN = _sphinxapi2.default.SPH_MATCH_FULLSCAN;
+
+
+module.exports = Sphinx;
 
 !(function(global) {
   "use strict";
@@ -127,10 +457,6 @@
           resolve(result);
         }, reject);
       }
-    }
-
-    if (typeof global.process === "object" && global.process.domain) {
-      invoke = global.process.domain.bind(invoke);
     }
 
     var previousPromise;
@@ -587,339 +913,7 @@
     }
   };
 })(
-  typeof global === "object" ? global :
-  typeof window === "object" ? window :
-  typeof self === "object" ? self : this
+  (function() { return this })() || Function("return this")()
 );
 
-'use strict';
-
-var _slicedToArray = function () { function sliceIterator(arr, i) { var _arr = []; var _n = true; var _d = false; var _e = undefined; try { for (var _i = arr[Symbol.iterator](), _s; !(_n = (_s = _i.next()).done); _n = true) { _arr.push(_s.value); if (i && _arr.length === i) break; } } catch (err) { _d = true; _e = err; } finally { try { if (!_n && _i["return"]) _i["return"](); } finally { if (_d) throw _e; } } return _arr; } return function (arr, i) { if (Array.isArray(arr)) { return arr; } else if (Symbol.iterator in Object(arr)) { return sliceIterator(arr, i); } else { throw new TypeError("Invalid attempt to destructure non-iterable instance"); } }; }();
-
-var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
-
-var _bluebird = require('bluebird');
-
-var _bluebird2 = _interopRequireDefault(_bluebird);
-
-var _sphinxapi = require('sphinxapi');
-
-var _sphinxapi2 = _interopRequireDefault(_sphinxapi);
-
-var _typeCheck = require('type-check');
-
-var _deap = require('deap');
-
-var _deap2 = _interopRequireDefault(_deap);
-
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
-
-function _asyncToGenerator(fn) { return function () { var gen = fn.apply(this, arguments); return new _bluebird2.default(function (resolve, reject) { function step(key, arg) { try { var info = gen[key](arg); var value = info.value; } catch (error) { reject(error); return; } if (info.done) { resolve(value); } else { return _bluebird2.default.resolve(value).then(function (value) { step("next", value); }, function (err) { step("throw", err); }); } } return step("next"); }); }; }
-
-function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
-
-function _possibleConstructorReturn(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
-
-function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; } 
-
-var DEFAULT_OFFSET = 0;
-var DEFAULT_LIMIT = 20;
-var DEFAULT_MAX_MATCHES = 1000;
-var DEFAULT_CUTOFF = 0;
-
-var Sphinx = function (_SphinxClient) {
-  _inherits(Sphinx, _SphinxClient);
-
-  function Sphinx() {
-    var _ref = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
-        _ref$host = _ref.host,
-        host = _ref$host === undefined ? 'localhost' : _ref$host,
-        _ref$port = _ref.port,
-        port = _ref$port === undefined ? 9312 : _ref$port;
-
-    _classCallCheck(this, Sphinx);
-
-    var _this = _possibleConstructorReturn(this, (Sphinx.__proto__ || Object.getPrototypeOf(Sphinx)).call(this));
-
-    _this.config = {};
-    _this.isDebugMode = false;
-
-    _this.setConfig({ host: host, port: port });
-    return _this;
-  }
-
-
-
-
-
-  _createClass(Sphinx, [{
-    key: 'setConfig',
-    value: function setConfig() {
-      var _ref2 = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
-          _ref2$host = _ref2.host,
-          host = _ref2$host === undefined ? 'localhost' : _ref2$host,
-          _ref2$port = _ref2.port,
-          port = _ref2$port === undefined ? 9312 : _ref2$port;
-
-      if (!(0, _typeCheck.typeCheck)('String', host) || !(0, _typeCheck.typeCheck)('Number | String', port)) {
-        throw new TypeError('Invalid config object');
-      }
-      this.config = { host: host, port: port };
-      this.SetServer(host, Number(port));
-    }
-
-
-  }, {
-    key: 'setRetriesOption',
-    value: function setRetriesOption() {
-      var retryOption = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
-      var count = retryOption.count,
-          _retryOption$delay = retryOption.delay,
-          delay = _retryOption$delay === undefined ? 0 : _retryOption$delay;
-
-      if (!(0, _typeCheck.typeCheck)('Number', count) || !(0, _typeCheck.typeCheck)('Number', delay)) {
-        throw new TypeError('Invalid RetryOption object');
-      }
-      this.SetRetries(count, delay);
-    }
-
-
-  }, {
-    key: 'query',
-    value: function query() {
-      var _this2 = this;
-
-      var queryString = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : "";
-      var options = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
-
-      var _ensureQueryArgs2 = this._ensureQueryArgs(queryString, options);
-
-      var _ensureQueryArgs3 = _slicedToArray(_ensureQueryArgs2, 2);
-
-      queryString = _ensureQueryArgs3[0];
-      options = _ensureQueryArgs3[1];
-      var _options = options,
-          index = _options.index,
-          comment = _options.comment,
-          _options$filters = _options.filters,
-          filters = _options$filters === undefined ? [] : _options$filters,
-          limits = _options.limits,
-          resultAsIds = _options.resultAsIds,
-          matchMode = _options.matchMode;
-
-      this._resetFilters();
-      this._addFilters(filters);
-      this._setLimits(limits);
-      this._setMatchMode(matchMode);
-      return _bluebird2.default.promisify(this.Query.bind(this))(queryString, index, comment).then(function (result) {
-        return resultAsIds ? _this2.getIdsFromResult(result) : result;
-      }).tap(function (result) {
-        return _this2.isDebugMode && console.info(result);
-      });
-    }
-
-
-  }, {
-    key: 'addQuery',
-    value: function addQuery() {
-      var queryString = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : "";
-      var options = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
-
-      var _ensureQueryArgs4 = this._ensureQueryArgs(queryString, options);
-
-      var _ensureQueryArgs5 = _slicedToArray(_ensureQueryArgs4, 2);
-
-      queryString = _ensureQueryArgs5[0];
-      options = _ensureQueryArgs5[1];
-      var _options2 = options,
-          index = _options2.index,
-          comment = _options2.comment,
-          _options2$filters = _options2.filters,
-          filters = _options2$filters === undefined ? [] : _options2$filters,
-          limits = _options2.limits,
-          matchMode = _options2.matchMode;
-
-      this._resetFilters();
-      this._addFilters(filters);
-      this._setLimits(limits);
-      this._setMatchMode(matchMode);
-      return this.AddQuery(queryString, index, comment);
-    }
-
-
-  }, {
-    key: '_addFilters',
-    value: function _addFilters() {
-      var filters = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : [];
-
-      filters.forEach(this._addFilter.bind(this));
-    }
-
-
-  }, {
-    key: '_setLimits',
-    value: function _setLimits() {
-      var _ref3 = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
-          _ref3$offset = _ref3.offset,
-          offset = _ref3$offset === undefined ? DEFAULT_OFFSET : _ref3$offset,
-          _ref3$limit = _ref3.limit,
-          limit = _ref3$limit === undefined ? DEFAULT_LIMIT : _ref3$limit,
-          _ref3$maxMatches = _ref3.maxMatches,
-          maxMatches = _ref3$maxMatches === undefined ? DEFAULT_MAX_MATCHES : _ref3$maxMatches,
-          _ref3$cutoff = _ref3.cutoff,
-          cutoff = _ref3$cutoff === undefined ? DEFAULT_CUTOFF : _ref3$cutoff;
-
-      this.SetLimits(offset, limit, maxMatches, cutoff);
-    }
-
-
-  }, {
-    key: '_resetLimits',
-    value: function _resetLimits() {
-      this._setLimits();
-    }
-
-
-  }, {
-    key: '_addFilter',
-    value: function _addFilter() {
-      var _ref4 = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
-          attr = _ref4.attr,
-          values = _ref4.values,
-          _ref4$exclude = _ref4.exclude,
-          exclude = _ref4$exclude === undefined ? false : _ref4$exclude;
-
-      values = values || values;
-      if ((0, _typeCheck.typeCheck)('[Number]', values)) {
-        this.SetFilter(attr, values, exclude);
-      }if ((0, _typeCheck.typeCheck)('Number', values)) {
-        this.SetFilter(attr, [values], exclude);
-      } else {
-        this.SetFilterString(attr, values, exclude);
-      }
-    }
-
-
-  }, {
-    key: '_resetFilters',
-    value: function _resetFilters() {
-      this.ResetFilters();
-    }
-
-
-  }, {
-    key: 'runQueries',
-    value: function runQueries() {
-      return _bluebird2.default.promisify(this.RunQueries.bind(this))();
-    }
-
-
-  }, {
-    key: '_setMatchMode',
-    value: function _setMatchMode(mode) {
-      this.SetMatchMode(mode);
-    }
-
-
-  }, {
-    key: 'getIdsFromResult',
-    value: function getIdsFromResult() {
-      var result = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
-
-      if (!(0, _typeCheck.typeCheck)('Object', result)) {
-        throw new TypeError('Result must be an object');
-      } else if (!result.hasOwnProperty('matches')) {
-        return [];
-      }
-      return result.matches.map(function (match) {
-        return match && match.id;
-      }).filter(function (id) {
-        return (0, _typeCheck.typeCheck)('Number', id);
-      });
-    }
-
-
-  }, {
-    key: 'setDebugMode',
-    value: function setDebugMode() {
-      var mode = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : true;
-
-      this.isDebugMode = mode;
-    }
-
-
-  }, {
-    key: '_ensureQueryArgs',
-    value: function _ensureQueryArgs(queryString, options) {
-      if ((0, _typeCheck.typeCheck)('Object', queryString)) {
-        if (!(0, _typeCheck.typeCheck)('String', queryString.query)) {
-          throw new TypeError('Query must be a string');
-        }
-        options = queryString;
-        queryString = options.query;
-        delete options.query;
-      }
-      var defaultOptions = {
-        index: '*',
-        comment: '',
-        filters: [],
-        limits: {
-          offset: DEFAULT_OFFSET,
-          count: DEFAULT_LIMIT
-        },
-        matchMode: Sphinx.SPH_MATCH_EXTENDED2,
-        resultAsIds: false
-      };
-      return [queryString, _deap2.default.merge(options, defaultOptions)];
-    }
-
-
-  }, {
-    key: '_test',
-    value: function () {
-      var _ref5 = _asyncToGenerator( regeneratorRuntime.mark(function _callee() {
-        var str = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : 'works';
-        return regeneratorRuntime.wrap(function _callee$(_context) {
-          while (1) {
-            switch (_context.prev = _context.next) {
-              case 0:
-                console.log('Waiting...');
-                _context.next = 3;
-                return _bluebird2.default.delay(500);
-
-              case 3:
-                console.log('Done!');
-                return _context.abrupt('return', _bluebird2.default.delay(500).then(function () {
-                  return console.log('Resolved:', str);
-                }));
-
-              case 5:
-              case 'end':
-                return _context.stop();
-            }
-          }
-        }, _callee, this);
-      }));
-
-      function _test() {
-        return _ref5.apply(this, arguments);
-      }
-
-      return _test;
-    }()
-  }]);
-
-  return Sphinx;
-}(_sphinxapi2.default);
-
-Sphinx.SPH_MATCH_ALL = _sphinxapi2.default.SPH_MATCH_ALL;
-Sphinx.SPH_MATCH_ANY = _sphinxapi2.default.SPH_MATCH_ANY;
-Sphinx.SPH_MATCH_PHRASE = _sphinxapi2.default.SPH_MATCH_PHRASE;
-Sphinx.SPH_MATCH_BOOLEAN = _sphinxapi2.default.SPH_MATCH_BOOLEAN;
-Sphinx.SPH_MATCH_EXTENDED = _sphinxapi2.default.SPH_MATCH_EXTENDED;
-Sphinx.SPH_MATCH_EXTENDED2 = _sphinxapi2.default.SPH_MATCH_EXTENDED2;
-Sphinx.SPH_MATCH_FULLSCAN = _sphinxapi2.default.SPH_MATCH_FULLSCAN;
-
-
-module.exports = Sphinx;
 //# sourceMappingURL=sphinx-promise.js.map
