@@ -206,10 +206,14 @@ class Sphinx extends SphinxClient {
    * @private
    */
   _addFilter({ attr, values, exclude = false } = {}) {
-    if (!isType('[Number]', values)) {
-      throw new TypeError('Values must be an array of numbers');
+    values = values || values;
+    if (isType('[Number]', values)) {
+      this.SetFilter(attr, values, exclude);
+    } if (isType('Number', values)) {
+      this.SetFilter(attr, [values], exclude);
+    } else {
+      this.SetFilterString(attr, values, exclude);
     }
-    this.SetFilter(attr, values, exclude);
   }
   
   
